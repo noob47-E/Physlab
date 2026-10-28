@@ -573,6 +573,9 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
   let buffer: string[] = []
   let inDisplayMath = false
   let mathBuffer = ''
+  let displayDelim: '$$' | '\\[' | null = null
+  let inCodeBlock = false
+  let codeBuffer: string[] = []
 
   const flushBuffer = () => {
     if (buffer.length > 0) {
@@ -600,6 +603,33 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
 
+    // 0. Fenced code block handling (```) - completely untouched
+    if (line.trim().startsWith('```')) {
+      if (!inCodeBlock) {
+        flushBuffer()
+        inCodeBlock = true
+        codeBuffer = []
+      } else {
+        inCodeBlock = false
+        const codeText = codeBuffer.join('\n')
+        nodes.push(
+          <pre
+            key={`code_${nodes.length}`}
+            className="my-2 p-2.5 rounded bg-surface-1 border border-line overflow-x-auto font-mono text-fine text-ink"
+          >
+            <code>{codeText}</code>
+          </pre>
+        )
+        codeBuffer = []
+      }
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeBuffer.push(line)
+      continue
+    }
+
     if (
       /^#{1,4}\s*(?:💡\s*)?Intuition\s*Hook/i.test(line.trim()) ||
       /^\*\*💡?\s*Intuition\s*Hook/i.test(line.trim())
@@ -612,9 +642,12 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
       continue
     }
 
-    if (line.trim().startsWith('$$') && line.trim().endsWith('$$') && line.trim().length > 4) {
+    const trimmed = line.trim()
+
+    // 1. Single-line $$ ... $$
+    if (trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length > 4) {
       flushBuffer()
-      const formula = line.trim().slice(2, -2)
+      const formula = trimmed.slice(2, -2).trim()
       let isInv = false
       if (knownNumbers && isAnswerOrResultLine(formula)) {
         const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
@@ -632,8 +665,37 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
       continue
     }
 
-    if (line.trim().startsWith('$$')) {
-      if (inDisplayMath) {
+    // 2. Single-line \[ ... \]
+    if (trimmed.startsWith('\\[') && trimmed.endsWith('\\]') && trimmed.length >= 4) {
+      flushBuffer()
+      const formula = trimmed.slice(2, -2).trim()
+      let isInv = false
+      if (knownNumbers && isAnswerOrResultLine(formula)) {
+        const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
+        let m: RegExpExecArray | null
+        while ((m = numRegex.exec(formula)) !== null) {
+          const matchStr = m[0]
+          const matchIdx = m.index
+          if (!isKnownNumber(matchStr, knownNumbers) && !isStepOrStructuralNumber(formula, matchIdx, matchStr)) {
+            isInv = true
+            break
+          }
+        }
+      }
+      nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={formula} isInvented={isInv} />)
+      continue
+    }
+
+    // 3. Multi-line display math closing / accumulating
+    if (inDisplayMath) {
+      const isClosing =
+        (displayDelim === '$$' && trimmed.startsWith('$$')) ||
+        (displayDelim === '\\[' && (trimmed.endsWith('\\]') || trimmed === '\\]'))
+
+      if (isClosing) {
+        if (displayDelim === '\\[' && trimmed !== '\\]') {
+          mathBuffer += (mathBuffer ? '\n' : '') + line.replace(/\\\]\s*$/, '')
+        }
         let isInv = false
         if (knownNumbers && isAnswerOrResultLine(mathBuffer)) {
           const numRegex = /[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?/g
@@ -647,19 +709,30 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
             }
           }
         }
-        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer} isInvented={isInv} />)
+        nodes.push(<DisplayMath key={`math_${nodes.length}`} tex={mathBuffer.trim()} isInvented={isInv} />)
         mathBuffer = ''
         inDisplayMath = false
+        displayDelim = null
       } else {
-        flushBuffer()
-        inDisplayMath = true
-        mathBuffer = line.replace('$$', '')
+        mathBuffer += (mathBuffer ? '\n' : '') + line
       }
       continue
     }
 
-    if (inDisplayMath) {
-      mathBuffer += `\n${line}`
+    // 4. Multi-line display math opening
+    if (trimmed.startsWith('$$')) {
+      flushBuffer()
+      inDisplayMath = true
+      displayDelim = '$$'
+      mathBuffer = line.replace(/^\s*\$\$/, '')
+      continue
+    }
+
+    if (trimmed === '\\[' || (trimmed.startsWith('\\[') && !trimmed.endsWith('\\]'))) {
+      flushBuffer()
+      inDisplayMath = true
+      displayDelim = '\\['
+      mathBuffer = line.replace(/^\s*\\\[/, '')
       continue
     }
 
@@ -708,6 +781,24 @@ export function renderMarkdownWithMath(text: string, knownNumbers?: Set<string>)
   }
 
   flushBuffer()
+  if (inCodeBlock && codeBuffer.length > 0) {
+    nodes.push(
+      <pre
+        key={`code_${nodes.length}`}
+        className="my-2 p-2.5 rounded bg-surface-1 border border-line overflow-x-auto font-mono text-fine text-ink"
+      >
+        <code>{codeBuffer.join('\n')}</code>
+      </pre>
+    )
+  }
+  if (inDisplayMath && mathBuffer.length > 0) {
+    const rawUnclosed = (displayDelim === '\\[' ? '\\[' : '$$') + (mathBuffer ? '\n' + mathBuffer : '')
+    nodes.push(
+      <div key={`p_${nodes.length}`} className="my-1" dir="auto">
+        {rawUnclosed}
+      </div>
+    )
+  }
   return nodes
 }
 
@@ -767,31 +858,58 @@ function renderProseWithInventedGuard(
 }
 
 /**
- * Safely renders inline KaTeX math ($...$) and bold/code formatting.
+ * Safely renders inline KaTeX math ($...$, \(...\)), display math ($$...$$, \[...\]), and bold/code formatting.
  */
 function renderInlineMath(
   text: string,
   isAnswerLine?: boolean,
   knownNumbers?: Set<string>
 ): React.ReactNode {
-  // Pre-sanitize unescaped control chars and strip stray '$' characters surrounding \boxed formulas
+  // Pre-sanitize unescaped control chars and strip stray '$' or '\(' characters surrounding \boxed formulas
   const preCleaned = repairControlCharLatex(text)
     .replace(/\$\s*(\\boxed\{[^}]+\})\s*\$/g, '$1')
+    .replace(/\\\((\s*\\boxed\{[^}]+\}\s*)\\\)/g, '$1')
 
   const parts = preCleaned.split(
-    /(\$\$[\s\S]*?\$\$|\$[^$\n]+?\$|\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g
+    /(`[^`\n]+`|\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([^\n]*?\\\)|(?<![\w\\])\$(?!\s)[^$\n]+?(?<!\s)\$|\\boxed\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})/g
   )
 
   return parts.map((part, idx) => {
     if (!part) return null
 
-    const isDelimitedMath =
-      (part.startsWith('$$') && part.endsWith('$$') && part.length >= 4) ||
-      (part.startsWith('$') && part.endsWith('$') && part.length >= 2)
+    // 1. Untouched inline code `...`
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code key={idx} className="font-mono text-fine text-code bg-surface-2 px-1 py-0.5 rounded">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+
+    const isParenMath = part.startsWith('\\(') && part.endsWith('\\)') && part.length >= 4
+    const isBracketMath = part.startsWith('\\[') && part.endsWith('\\]') && part.length >= 4
+    const isDollarDisplay = part.startsWith('$$') && part.endsWith('$$') && part.length >= 4
+    const isDollarInline = part.startsWith('$') && part.endsWith('$') && part.length >= 2 && !part.startsWith('$$')
     const isDirectBoxed = part.startsWith('\\boxed{')
+    const isDelimitedMath = isParenMath || isBracketMath || isDollarDisplay || isDollarInline
 
     if (isDelimitedMath || isDirectBoxed) {
-      const tex = repairControlCharLatex(part.replace(/^\$+|\$+$/g, '').trim())
+      let tex = ''
+      let isDisplay = false
+      if (isParenMath) {
+        tex = part.slice(2, -2).trim()
+      } else if (isBracketMath) {
+        tex = part.slice(2, -2).trim()
+        isDisplay = true
+      } else if (isDollarDisplay) {
+        tex = part.slice(2, -2).trim()
+        isDisplay = true
+      } else if (isDollarInline) {
+        tex = part.slice(1, -1).trim()
+      } else if (isDirectBoxed) {
+        tex = part.trim()
+      }
+      tex = repairControlCharLatex(tex)
 
       let hasInvented = false
       if (isAnswerLine && knownNumbers) {
@@ -811,7 +929,7 @@ function renderInlineMath(
 
       try {
         const html = katex.renderToString(tex, {
-          displayMode: false,
+          displayMode: isDisplay,
           throwOnError: false,
           output: 'html'
         })
@@ -819,7 +937,11 @@ function renderInlineMath(
           <span
             key={idx}
             dir="ltr"
-            className="inline-block mx-0.5 align-middle"
+            className={
+              isDisplay
+                ? 'inline-block mx-1 my-1 align-middle text-center w-full'
+                : 'inline-block mx-0.5 align-middle'
+            }
             dangerouslySetInnerHTML={{ __html: html }}
           />
         )
