@@ -833,6 +833,12 @@ export function checkDrawingClaims(
       if (Array.isArray(res.created)) {
         createdCount += res.created.length
       }
+      if (Array.isArray(res.bodyIds)) {
+        createdCount += res.bodyIds.length
+      }
+      if (Array.isArray(res.bodies)) {
+        createdCount += res.bodies.length
+      }
       if (Array.isArray(res.visibleObjects) && res.visibleObjects.length > 0) {
         createdCount += res.visibleObjects.length
       }
@@ -843,13 +849,15 @@ export function checkDrawingClaims(
   }
 
   // Also check if objects exist on screen or in screenText
-  if (createdCount === 0 && screenText && /\b(?:Point|Segment|Vector|Circle|Triangle|Curve|Line|Object)\b/i.test(screenText)) {
+  if (createdCount === 0 && screenText && /\b(?:Point|Segment|Vector|Circle|Triangle|Curve|Line|Object|Body|Sphere|Ball)\b/i.test(screenText)) {
     createdCount = 1
   }
   if (createdCount === 0 && typeof window !== 'undefined') {
     try {
-      const objCount = Object.keys((window as any).__physlab_debug?.useScene?.getState()?.objects || {}).length
-      if (objCount > 0) createdCount = objCount
+      const sceneObjs = Object.keys((window as any).__physlab_debug?.useScene?.getState()?.objects || {}).length
+      const sandboxBodies = ((window as any).__physlab_debug?.useSandbox?.getState()?.bodies || []).length
+      if (sceneObjs > 0) createdCount = sceneObjs
+      else if (sandboxBodies > 0) createdCount = sandboxBodies
     } catch {}
   }
 

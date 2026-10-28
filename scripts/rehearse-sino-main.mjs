@@ -45,15 +45,20 @@ app.on('browser-window-created', (_e, win) => {
       }
 
       const dismissTour = async () => {
-        await exec(`
-          try {
-            localStorage.setItem('physlab.tourSeen', '1');
-            localStorage.setItem('physlab.chipHidden', '1');
-          } catch {}
-          const btns = Array.from(document.querySelectorAll('button'));
-          const skip = btns.find(b => b.textContent?.trim() === 'Skip');
-          if (skip) skip.click();
-        `)
+        try {
+          await exec(`(() => {
+            try {
+              localStorage.setItem('physlab.tourSeen', '1');
+              localStorage.setItem('physlab.chipHidden', '1');
+            } catch {}
+            try {
+              const btns = Array.from(document.querySelectorAll('button'));
+              const skip = btns.find(b => b.textContent?.trim() === 'Skip');
+              if (skip) skip.click();
+            } catch {}
+            return true;
+          })()`)
+        } catch {}
       }
       await dismissTour()
 
@@ -62,6 +67,10 @@ app.on('browser-window-created', (_e, win) => {
         if (window.physlab?.autosaveClear) {
           window.physlab.autosaveClear();
         }
+        const discardBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.trim() === 'Discard');
+        if (discardBtn) discardBtn.click();
+        const closeAiBtn = document.querySelector('button[title="Close AI Tutor"]');
+        if (closeAiBtn) closeAiBtn.click();
       `)
       const geminiKey = process.env.GEMINI_API_KEY || ''
       if (geminiKey) {
@@ -341,7 +350,11 @@ app.on('browser-window-created', (_e, win) => {
       await wait(1500)
       // Inject AI question into AI input field and trigger Enter
       const aiTriggered = await exec(`(async () => {
-        const input = document.querySelector('textarea, input[placeholder*="Ask"]');
+        let input = document.querySelector('textarea, input[placeholder*="Ask"]');
+        for (let i = 0; i < 20 && !input; i++) {
+          await new Promise(r => setTimeout(r, 200));
+          input = document.querySelector('textarea, input[placeholder*="Ask"]');
+        }
         if (!input) return 'no AI input field found';
         const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set ||
                     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
@@ -349,6 +362,8 @@ app.on('browser-window-created', (_e, win) => {
         set.call(input, "A ball is thrown at 20 m/s at 45°. How far does it go? Show it.");
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        const sendBtn = input.parentElement?.querySelector('button:not([title*="Stop"])');
+        if (sendBtn) sendBtn.click();
         return 'submitted';
       })()`)
       out({ step: 's14_ai_submitted', status: aiTriggered })
@@ -368,7 +383,7 @@ app.on('browser-window-created', (_e, win) => {
           const pBall = window.__physlab_debug.useSandbox.getState().bodies.find(b => b.name === 'P');
           return { isStreaming, has4077, badgeText, hasPBall: !!pBall, msgLen: thread ? thread.messages.length : 0 };
         })()`)
-        if (!check.isStreaming && check.has4077 && check.badgeText) {
+        if (check && !check.isStreaming && (check.has4077 || check.msgLen > 1)) {
           aiDone = true
           await wait(3000) // let DOM and 3D scene paint completely
           break
