@@ -350,7 +350,7 @@ export function AiCopilot() {
         },
         onDone: async ({ content, think, actions, agentTraces, model }) => {
           for (const act of actions) {
-            if (!act.result && (act.tool === 'solve' || act.tool === 'calc_solve')) {
+            if (!act.result && (act.tool === 'solve' || act.tool === 'calc_solve' || act.tool === 'run_commands' || act.tool === 'build_experiment')) {
               try {
                 act.result = await runTool(act.tool, act.args)
               } catch {

@@ -937,6 +937,11 @@ export function preComputeEngineTurn(userPrompt: string): PreComputedTurn {
   // 0. Ceva's Theorem Construction Request (Never route to calculator)
   const isCevaRequest = /(?:ceva|ceva's|cevian)/i.test(lower)
   if (isCevaRequest) {
+    try {
+      enterMode('shapes')
+    } catch {
+      // ignore
+    }
     const commands = [
       'mode geometry',
       'A = (0, 4)',
