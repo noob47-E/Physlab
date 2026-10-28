@@ -34,6 +34,7 @@ function loadPersistedState(): {
   azureDeployment: string
   localEndpoint: string
   localModel: string
+  thinking: 'fast' | 'balanced' | 'deep'
   autoExecuteActions: boolean
   availableGeminiModels: string[]
   availableLocalModels: string[]
@@ -79,6 +80,7 @@ function loadPersistedState(): {
           azureDeployment: parsed.azureDeployment || 'gpt-5.4',
           localEndpoint: parsed.localEndpoint || 'http://127.0.0.1:8080/v1',
           localModel: parsed.localModel || 'PhysLab-Brain-Ultimatrix',
+          thinking: parsed.thinking || 'fast',
           autoExecuteActions:
             typeof parsed.autoExecuteActions === 'boolean' ? parsed.autoExecuteActions : true,
           availableGeminiModels: savedGeminiModels.length > 0 ? savedGeminiModels : [
@@ -121,6 +123,7 @@ function loadPersistedState(): {
     azureDeployment: 'gpt-5.4',
     localEndpoint: 'http://127.0.0.1:8080/v1',
     localModel: 'PhysLab-Brain-Ultimatrix',
+    thinking: 'fast',
     autoExecuteActions: true,
     availableGeminiModels: [
       'gemini-3.5-flash-lite',
@@ -163,6 +166,7 @@ interface AiStoreState {
   azureDeployment: string
   localEndpoint: string
   localModel: string
+  thinking: 'fast' | 'balanced' | 'deep'
   autoExecuteActions: boolean
   availableGeminiModels: string[]
   availableLocalModels: string[]
@@ -191,6 +195,7 @@ interface AiStoreState {
   setLocalEndpoint: (e: string) => void
   setLocalModel: (m: string) => void
   setAutoExecute: (b: boolean) => void
+  setThinking: (thinking: 'fast' | 'balanced' | 'deep') => void
   setAvailableGeminiModels: (models: string[]) => void
   setAvailableLocalModels: (models: string[]) => void
 
@@ -233,6 +238,7 @@ export const useAiStore = create<AiStoreState>((set, get) => ({
   azureDeployment: initial.azureDeployment || 'gpt-5.4',
   localEndpoint: initial.localEndpoint,
   localModel: initial.localModel,
+  thinking: initial.thinking || 'fast',
   autoExecuteActions: initial.autoExecuteActions,
   availableGeminiModels: initial.availableGeminiModels,
   availableLocalModels: initial.availableLocalModels,
@@ -301,7 +307,8 @@ export const useAiStore = create<AiStoreState>((set, get) => ({
               mainProvider: nextMain,
               provider: nextMain,
               fallbackProvider: cfg.fallbackProvider ?? s.fallbackProvider,
-              azureDeployment: cfg.azureDeployment || s.azureDeployment
+              azureDeployment: cfg.azureDeployment || s.azureDeployment,
+              thinking: cfg.thinking || s.thinking
             }
           })
         }
@@ -328,6 +335,12 @@ export const useAiStore = create<AiStoreState>((set, get) => ({
   setLocalEndpoint: (localEndpoint) => set({ localEndpoint }),
   setLocalModel: (localModel) => set({ localModel }),
   setAutoExecute: (autoExecuteActions) => set({ autoExecuteActions }),
+  setThinking: (thinking) => {
+    set({ thinking })
+    if (typeof window !== 'undefined' && window.physlab?.ai?.setThinking) {
+      void window.physlab.ai.setThinking(thinking)
+    }
+  },
   setAvailableGeminiModels: (availableGeminiModels) => set({ availableGeminiModels }),
   setAvailableLocalModels: (availableLocalModels) => set({ availableLocalModels }),
 

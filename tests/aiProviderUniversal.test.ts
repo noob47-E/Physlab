@@ -20,6 +20,7 @@ import {
   getSecretKey,
   hasAiKey,
   readStoredKeys,
+  setThinking,
   testProviderConnection,
   listProviderModels
 } from '../src/main/aiProvider'
@@ -239,10 +240,12 @@ describe('Universal AI Provider Engine (phase-10-AIPROV)', () => {
   it('calls Azure OpenAI with correct URL shape and headers', async () => {
     let capturedUrl = ''
     let capturedHeaders: Record<string, string> = {}
+    let capturedBody: any = null
 
     global.fetch = vi.fn().mockImplementation((url, opts) => {
       capturedUrl = String(url)
       capturedHeaders = opts.headers
+      capturedBody = JSON.parse(opts.body)
       return Promise.resolve({
         ok: true,
         status: 200,
@@ -259,6 +262,8 @@ describe('Universal AI Provider Engine (phase-10-AIPROV)', () => {
     if ('message' in res) {
       expect(capturedUrl).toContain('/openai/v1/chat/completions')
       expect(capturedHeaders['api-key']).toBe('test-azure-key-888')
+      expect(capturedBody.max_completion_tokens).toBe(8000)
+      expect(capturedBody.reasoning_effort).toBe('low')
       expect(res.message.content).toBe('Azure response')
       expect(res.model).toBe('gpt-5.4')
     }
@@ -392,7 +397,7 @@ describe('Universal AI Provider Engine (phase-10-AIPROV)', () => {
     )
     expect(mapUserFacingError(0, 'fetch failed with ECONNREFUSED')).toBe('No internet')
     expect(mapUserFacingError(0, 'The operation was aborted / timeout')).toBe(
-      'The AI service timed out after 30 seconds.'
+      'The AI service timed out after 90 seconds.'
     )
   })
 
@@ -460,5 +465,61 @@ describe('Universal AI Provider Engine (phase-10-AIPROV)', () => {
     expect(res.ok).toBe(true)
     expect(res.models).toContain('gpt-4o')
     expect(res.models).toContain('gpt-4o-mini')
+  })
+
+  // --------------------------------------------------------------------------
+  // 12. Length Cap Safeguard
+  // --------------------------------------------------------------------------
+  it('appends continuation notice when response reaches length cap', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          choices: [
+            {
+              message: { role: 'assistant', content: 'Partial response that was cut off' },
+              finish_reason: 'length'
+            }
+          ]
+        })
+    })
+
+    const res = await callAzureOpenAi([{ role: 'user', content: 'write long text' }])
+    expect('message' in res).toBe(true)
+    if ('message' in res) {
+      expect(res.message.content).toContain('Partial response that was cut off')
+      expect(res.message.content).toContain('*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*')
+    }
+  })
+
+  // --------------------------------------------------------------------------
+  // 13. Thinking Effort Mapping
+  // --------------------------------------------------------------------------
+  it('maps thinking setting to reasoning_effort for Azure OpenAI', async () => {
+    let capturedBody: any = null
+    global.fetch = vi.fn().mockImplementation((_url, opts) => {
+      capturedBody = JSON.parse(opts.body)
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Deep thought complete' } }]
+          })
+      })
+    })
+
+    setThinking('deep')
+    await callAzureOpenAi([{ role: 'user', content: 'hard math' }])
+    expect(capturedBody.reasoning_effort).toBe('high')
+
+    setThinking('balanced')
+    await callAzureOpenAi([{ role: 'user', content: 'medium math' }])
+    expect(capturedBody.reasoning_effort).toBe('medium')
+
+    setThinking('fast')
+    await callAzureOpenAi([{ role: 'user', content: 'quick math' }])
+    expect(capturedBody.reasoning_effort).toBe('low')
   })
 })

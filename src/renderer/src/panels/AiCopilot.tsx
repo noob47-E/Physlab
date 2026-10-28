@@ -125,6 +125,7 @@ export function AiCopilot() {
   const geminiModel = useAiStore((s) => s.geminiModel)
   const azureDeployment = useAiStore((s) => s.azureDeployment)
   const autoExecuteActions = useAiStore((s) => s.autoExecuteActions)
+  const thinking = useAiStore((s) => s.thinking)
 
   const presets: readonly AiProviderPreset[] =
     presetsFromStore && presetsFromStore.length > 0 ? presetsFromStore : AI_PROVIDER_PRESETS
@@ -1343,6 +1344,26 @@ export function AiCopilot() {
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Reasoning / Thinking Effort */}
+            <div className="flex flex-col gap-1 p-2.5 rounded border border-line bg-surface-1">
+              <label className="text-fine font-medium text-ink-dim">Reasoning / Thinking Effort</label>
+              <select
+                value={thinking || 'fast'}
+                onChange={(e) => {
+                  const val = e.target.value as 'fast' | 'balanced' | 'deep'
+                  useAiStore.getState().setThinking(val)
+                }}
+                className="p-1.5 rounded bg-surface-0 border border-line text-small text-ink outline-none"
+              >
+                <option value="fast">Fast (Low reasoning, instant responses)</option>
+                <option value="balanced">Balanced (Medium reasoning)</option>
+                <option value="deep">Deep (High reasoning, complex derivations)</option>
+              </select>
+              <span className="text-fine text-ink-faint">
+                Controls reasoning effort for thinking models like GPT-5.4, o1, and DeepSeek.
+              </span>
             </div>
 
             {/* Auto Execute Toggle */}

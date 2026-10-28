@@ -71,6 +71,7 @@ const api = {
       azureDeployment: string
       mainProvider?: string
       fallbackProvider?: string
+      thinking?: 'fast' | 'balanced' | 'deep'
       presets?: Array<{
         id: string
         label: string
@@ -97,6 +98,8 @@ const api = {
     ): Promise<boolean> => ipcRenderer.invoke('ai:setProviderConfig', provider, config),
     setActiveProviders: (main: string, fallback?: string): Promise<boolean> =>
       ipcRenderer.invoke('ai:setActiveProviders', main, fallback),
+    setThinking: (thinking: 'fast' | 'balanced' | 'deep'): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setThinking', thinking),
     testConnection: (
       provider?: string
     ): Promise<{ ok: boolean; message?: string; error?: string }> =>

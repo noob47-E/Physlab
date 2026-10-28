@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'node:fs'
+import { join, dirname } from 'node:path'
 
 import {
   AI_PROVIDER_PRESETS,
@@ -42,6 +42,7 @@ export interface KeyFile {
   azureKey?: string
   azureEndpoint?: string
   azureDeployment?: string
+  thinking?: 'fast' | 'balanced' | 'deep'
   keys?: Record<string, string>
   configs?: Record<string, StoredProviderConfig>
   mainProvider?: string
@@ -84,6 +85,10 @@ export function readStoredKeys(): KeyFile {
 function writeStoredKeys(data: KeyFile): void {
   try {
     const p = getKeyFilePath()
+    const dir = dirname(p)
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true })
+    }
     writeFileSync(p, JSON.stringify(data, null, 2), 'utf8')
   } catch {
     // ignore
@@ -248,6 +253,13 @@ export function setActiveProviders(main: string, fallback?: string): boolean {
   return true
 }
 
+export function setThinking(thinking: 'fast' | 'balanced' | 'deep'): boolean {
+  const stored = readStoredKeys()
+  stored.thinking = thinking
+  writeStoredKeys(stored)
+  return true
+}
+
 export function getResolvedProviderConfig(id: string): {
   id: string
   label: string
@@ -346,7 +358,7 @@ export function sanitizeError(err: unknown, keyToRedact?: string): string {
     return 'The AI needs the internet. Everything else in PhysLab works offline.'
   }
   if (/timeout|abort/i.test(msg)) {
-    return 'The AI service timed out after 30 seconds.'
+    return 'The AI service timed out after 90 seconds.'
   }
   return msg
 }
@@ -376,7 +388,7 @@ export function mapUserFacingError(status: number, errText: string, key?: string
     return 'No internet'
   }
   if (/timeout|abort/i.test(sanitized)) {
-    return 'The AI service timed out after 30 seconds.'
+    return 'The AI service timed out after 90 seconds.'
   }
   return sanitized
 }
@@ -405,7 +417,7 @@ async function postWithTimeout(
   url: string,
   headers: Record<string, string>,
   body: unknown,
-  timeoutMs = 30000
+  timeoutMs = 90000
 ): Promise<{ status: number; ok: boolean; json: any; text: string }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
@@ -486,7 +498,7 @@ export async function callOpenAiCompatible(
   const payload: Record<string, unknown> = {
     model: record.model,
     messages,
-    max_tokens: 1500
+    max_tokens: 4000
   }
   if (hasTools) {
     payload.tools = tools
@@ -494,9 +506,9 @@ export async function callOpenAiCompatible(
   }
 
   try {
-    let res = await postWithTimeout(endpointUrl, headers, payload, 30000)
+    let res = await postWithTimeout(endpointUrl, headers, payload, 90000)
     if (!res.ok && res.status >= 500 && res.status < 600) {
-      res = await postWithTimeout(endpointUrl, headers, payload, 30000)
+      res = await postWithTimeout(endpointUrl, headers, payload, 90000)
     }
 
     // Check if tools were rejected (HTTP 400 with unsupported tools / function error)
@@ -509,14 +521,18 @@ export async function callOpenAiCompatible(
         delete payloadNoTools.tools
         delete payloadNoTools.tool_choice
 
-        const fallbackRes = await postWithTimeout(endpointUrl, headers, payloadNoTools, 30000)
+        const fallbackRes = await postWithTimeout(endpointUrl, headers, payloadNoTools, 90000)
         if (fallbackRes.ok && fallbackRes.json?.choices?.[0]?.message) {
-          const msg = fallbackRes.json.choices[0].message
+          const choice = fallbackRes.json.choices[0]
+          const msg = choice.message
           // Thinking models: route reasoning_content / reasoning to think
           if (msg.reasoning_content && !msg.think) {
             msg.think = msg.reasoning_content
           } else if (msg.reasoning && !msg.think) {
             msg.think = msg.reasoning
+          }
+          if (choice.finish_reason === 'length' && typeof msg.content === 'string') {
+            msg.content += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
           }
           logUsage(record.id, record.model, fallbackRes.json.usage)
           return { message: msg, model: record.model, toolsSupported: false }
@@ -525,12 +541,16 @@ export async function callOpenAiCompatible(
     }
 
     if (res.ok && res.json?.choices?.[0]?.message) {
-      const msg = res.json.choices[0].message
+      const choice = res.json.choices[0]
+      const msg = choice.message
       // Thinking models: DeepSeek reasoning_content routes to collapsed thinking area, never into visible content
       if (msg.reasoning_content && !msg.think) {
         msg.think = msg.reasoning_content
       } else if (msg.reasoning && !msg.think) {
         msg.think = msg.reasoning
+      }
+      if (choice.finish_reason === 'length' && typeof msg.content === 'string') {
+        msg.content += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
       }
       logUsage(record.id, record.model, res.json.usage)
       return { message: msg, model: record.model, toolsSupported: hasTools }
@@ -669,15 +689,15 @@ async function callAnthropicNative(
   const payload: Record<string, unknown> = {
     model: record.model,
     messages: anthropicMessages,
-    max_tokens: 1500
+    max_tokens: 4000
   }
   if (systemPrompt) payload.system = systemPrompt
   if (anthropicTools.length > 0) payload.tools = anthropicTools
 
   try {
-    let res = await postWithTimeout(endpointUrl, headers, payload, 30000)
+    let res = await postWithTimeout(endpointUrl, headers, payload, 90000)
     if (!res.ok && res.status >= 500 && res.status < 600) {
-      res = await postWithTimeout(endpointUrl, headers, payload, 30000)
+      res = await postWithTimeout(endpointUrl, headers, payload, 90000)
     }
 
     // Tools rejection fallback
@@ -686,7 +706,7 @@ async function callAnthropicNative(
       if (/tool/i.test(errText)) {
         const payloadNoTools = { ...payload }
         delete payloadNoTools.tools
-        const fallbackRes = await postWithTimeout(endpointUrl, headers, payloadNoTools, 30000)
+        const fallbackRes = await postWithTimeout(endpointUrl, headers, payloadNoTools, 90000)
         if (fallbackRes.ok && fallbackRes.json?.content) {
           return parseAnthropicResponse(fallbackRes.json, record.model, false)
         }
@@ -740,6 +760,10 @@ function parseAnthropicResponse(
     }
   }
 
+  if (json.stop_reason === 'max_tokens') {
+    text += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
+  }
+
   const message: Record<string, unknown> = {
     role: 'assistant',
     content: text
@@ -769,7 +793,7 @@ export async function callGeminiOpenAi(
     const payload: Record<string, unknown> = {
       model,
       messages,
-      max_tokens: 1500
+      max_tokens: 4000
     }
     if (tools && Array.isArray(tools) && tools.length > 0) {
       payload.tools = tools
@@ -777,14 +801,19 @@ export async function callGeminiOpenAi(
     }
 
     try {
-      let res = await postWithTimeout(GEMINI_OPENAI_URL, headers, payload, 30000)
+      let res = await postWithTimeout(GEMINI_OPENAI_URL, headers, payload, 90000)
       if (!res.ok && res.status >= 500 && res.status < 600) {
-        res = await postWithTimeout(GEMINI_OPENAI_URL, headers, payload, 30000)
+        res = await postWithTimeout(GEMINI_OPENAI_URL, headers, payload, 90000)
       }
 
       if (res.ok && res.json?.choices?.[0]?.message) {
+        const choice = res.json.choices[0]
+        const msg = choice.message
+        if (choice.finish_reason === 'length' && typeof msg.content === 'string') {
+          msg.content += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
+        }
         logUsage('gemini', model, res.json.usage)
-        return { message: res.json.choices[0].message, model }
+        return { message: msg, model }
       }
 
       const errText = res.json?.error?.message ?? res.text
@@ -830,6 +859,11 @@ export async function callAzureOpenAi(
     return { error: 'No AI service configured. Please configure your key in Settings.' }
   }
 
+  const stored = readStoredKeys()
+  const thinkingSetting = stored.thinking || 'fast'
+  const reasoningEffort =
+    thinkingSetting === 'deep' ? 'high' : thinkingSetting === 'balanced' ? 'medium' : 'low'
+
   const origin = new URL(endpoint).origin
   const headers: Record<string, string> = {
     'api-key': key,
@@ -841,11 +875,13 @@ export async function callAzureOpenAi(
   const payloadV1: Record<string, unknown> = {
     model: deployment,
     messages,
-    max_completion_tokens: 1500
+    max_completion_tokens: 8000,
+    reasoning_effort: reasoningEffort
   }
   const payloadClassic: Record<string, unknown> = {
     messages,
-    max_completion_tokens: 1500
+    max_completion_tokens: 8000,
+    reasoning_effort: reasoningEffort
   }
   if (hasTools) {
     payloadV1.tools = tools
@@ -865,9 +901,9 @@ export async function callAzureOpenAi(
   let lastError = 'Azure request failed.'
   for (const t of tries) {
     try {
-      let res = await postWithTimeout(t.url, headers, t.body, 30000)
+      let res = await postWithTimeout(t.url, headers, t.body, 90000)
       if (!res.ok && res.status >= 500 && res.status < 600) {
-        res = await postWithTimeout(t.url, headers, t.body, 30000)
+        res = await postWithTimeout(t.url, headers, t.body, 90000)
       }
 
       // If tools rejected with 400 on Azure, retry without tools
@@ -875,16 +911,26 @@ export async function callAzureOpenAi(
         const noToolsBody = { ...t.body } as any
         delete noToolsBody.tools
         delete noToolsBody.tool_choice
-        const retryRes = await postWithTimeout(t.url, headers, noToolsBody, 30000)
+        const retryRes = await postWithTimeout(t.url, headers, noToolsBody, 90000)
         if (retryRes.ok && retryRes.json?.choices?.[0]?.message) {
+          const choice = retryRes.json.choices[0]
+          const msg = choice.message
+          if (choice.finish_reason === 'length' && typeof msg.content === 'string') {
+            msg.content += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
+          }
           logUsage('azure', deployment, retryRes.json.usage)
-          return { message: retryRes.json.choices[0].message, model: deployment, toolsSupported: false }
+          return { message: msg, model: deployment, toolsSupported: false }
         }
       }
 
       if (res.ok && res.json?.choices?.[0]?.message) {
+        const choice = res.json.choices[0]
+        const msg = choice.message
+        if (choice.finish_reason === 'length' && typeof msg.content === 'string') {
+          msg.content += '\n\n*(Note: The answer reached the length limit. You can ask the AI to continue where it left off.)*'
+        }
         logUsage('azure', deployment, res.json.usage)
-        return { message: res.json.choices[0].message, model: deployment, toolsSupported: hasTools }
+        return { message: msg, model: deployment, toolsSupported: hasTools }
       }
 
       const errMsg = res.json?.error?.message ?? res.text.slice(0, 300)
@@ -1161,9 +1207,14 @@ export function registerAiProviderIpc(): void {
       azureDeployment,
       mainProvider,
       fallbackProvider,
+      thinking: stored.thinking || 'fast',
       presets,
       configs: stored.configs || {}
     }
+  })
+
+  ipcMain.handle('ai:setThinking', async (_e, thinking: 'fast' | 'balanced' | 'deep') => {
+    return setThinking(thinking)
   })
 
   ipcMain.handle('ai:setKey', async (_e, keyOrProvider: string, maybeKey?: string) => {
